@@ -7,6 +7,8 @@ namespace NumberMatchGame {
         public FrameView? GameBoard;
         public Label? ScoreLabel;
         public Label? PointsGained;
+        public Label? AddLineLabel;
+        public Label? HintLabel;
         public Button? AddLineButton { get; private set; }
         public Button? HintButton { get; private set; }
         public ColorScheme? DefaultColorScheme;
@@ -14,11 +16,10 @@ namespace NumberMatchGame {
         public ColorScheme? SpecialColorScheme;
         Label? PhaseLabel;
 
-        public GameUI(int Score = 0, int Points = 0, int CurrentPhase = 0)
+        public GameUI(int Score = 0, int Points = 0, int CurrentPhase = 1, int CurrentLines = 5, int CurrentHints = 3)
         {
             InitializeColorSchemes();
-            InitializeComponents(Score, Points, CurrentPhase);
-            GameWindow.Add(GameBoard, ScoreLabel, PhaseLabel, PointsGained, AddLineButton, HintButton);
+            InitializeComponents(Score, Points, CurrentPhase, CurrentLines, CurrentHints);
         }
 
         public void Refresh() {
@@ -46,7 +47,7 @@ namespace NumberMatchGame {
             };
         }
 
-        private void InitializeComponents(int Score, int Points, int CurrentPhase)
+        private void InitializeComponents(int Score, int Points, int CurrentPhase, int CurrentLines, int CurrentHints)
         {
             // Crear ventana principal
             GameWindow = new Window("Number Match")
@@ -91,7 +92,7 @@ namespace NumberMatchGame {
             // Crear botón para añadir línea
             AddLineButton = new Button("Add Line")
             {
-                X = Pos.Right(ScoreLabel) + 2,
+                X = Pos.Right(PointsGained) + 2,
                 Y = Pos.Bottom(GameBoard)
             };
 
@@ -101,6 +102,19 @@ namespace NumberMatchGame {
                 X = Pos.Right(AddLineButton) + 2,
                 Y = Pos.Bottom(GameBoard)
             };
+
+            AddLineLabel = new Label($"Add Lines: {CurrentLines}")
+            {
+                X = Pos.Right(HintButton) + 2,
+                Y = Pos.Bottom(GameBoard)
+            };
+
+            HintLabel = new Label($"Hints: {CurrentHints}"){
+                X = Pos.Right(AddLineLabel) + 2,
+                Y = Pos.Bottom(GameBoard)
+            };
+
+            GameWindow.Add(GameBoard, ScoreLabel, PointsGained, PhaseLabel, AddLineButton, HintButton, AddLineLabel, HintLabel);
         }
 
         public void SetColorSelected(params NumberButton[] buttons)
@@ -140,18 +154,26 @@ namespace NumberMatchGame {
 
         public void SetPhaseLabel(int CurrentPhase) {
             PhaseLabel.Text = $"Phase: {CurrentPhase}";
+            //FadeInOut(PhaseLabel);
         }
 
         public void SetPointsGained(int Points) {
             PointsGained.Text = $"+ {Points}";
+            FadeInOut(PointsGained);
         }
 
         public void SetScore(int Score) {
             ScoreLabel.Text = $"Score: {Score}";
         }
 
-        public void AnimatePointsGained() {
-            FadeInOut(PointsGained);
+        public void SetLines(int Lines) {
+            AddLineLabel.Text = $"Add Lines: {Lines}";
+            //FadeInOut(AddLineLabel);
+        }
+
+        public void SetHints(int Hints) {
+            HintLabel.Text = $"Add Hints: {Hints}";
+            //FadeInOut(HintLabel);
         }
         public void Add(View view) {
             GameBoard.Add(view);

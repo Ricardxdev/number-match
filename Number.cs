@@ -30,5 +30,14 @@ namespace NumberMatchGame
             Width = 4;
             Height = 1;
         }
+
+        public void Refresh(int x, int y) {
+            Number.X = x;
+            Number.Y = y;
+            X = x * 5;
+            Y = y * 2;
+
+            this.SetNeedsDisplay();
+        }
     }
 }

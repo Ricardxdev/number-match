@@ -4,7 +4,7 @@ namespace NumberMatchGame
 {
     public class GameController
     {
-        private int Score = 0, Level = 1;
+        private int Score = 0;
         public bool Distant = false;
         private int BoardSize;
         // Create a list with initial capacity of 10
@@ -12,13 +12,13 @@ namespace NumberMatchGame
         //private NumberButton[,]? Numbers;
         private NumberButton? SelectedButton;
         private int AddLineCount = 0;
-        private const int MaxAddLines = 1000000;
         private int HintCount = 0;
-        private const int MaxHints = 10000000;
         int CurrentPhase = 1;
 
-        public GameController(GameUI GameUI, int BoardSize)
+        public GameController(GameUI GameUI, int BoardSize, int AddLineCount = 5, int HintCount = 3)
         {
+            this.AddLineCount = AddLineCount;
+            this.HintCount = HintCount;
             this.BoardSize = BoardSize;
             GameUI.AddLineButton.Clicked += () => AddNewLine(GameUI);
             GameUI.HintButton.Clicked += () => ProvideHint(GameUI);
@@ -38,9 +38,9 @@ namespace NumberMatchGame
 
             var random = new Random();
 
-            for (int i = 0; i < BoardSize; i++)
+            for (int i = 0; i < Numbers.Count; i++)
             {
-                for (int j = 0; j < Numbers.Count; j++)
+                for (int j = 0; j < BoardSize; j++)
                 {
                     var number = new Number(j, i, random.Next(1, 10));
                     var btn = new NumberButton(number);
@@ -52,7 +52,21 @@ namespace NumberMatchGame
             }
         }
 
-        private void HandleButtonClick(GameUI GameUI, NumberButton clickedButton)
+        private void RefreshBoard(GameUI GameUI) {
+            for (int i = 0; i < Numbers.Count; i++)
+            {
+                for (int j = 0; j < BoardSize; j++)
+                {
+                    NumberButton btn = Numbers[i][j];
+                    btn.Refresh(j, i);
+                    
+                }
+            }
+
+            GameUI.Refresh();
+        }
+
+        private async void HandleButtonClick(GameUI GameUI, NumberButton clickedButton)
         {
             if (clickedButton == null) return;
             if (!clickedButton.Number.IsSelected)
@@ -88,11 +102,13 @@ namespace NumberMatchGame
 
             if ((num1 + num2 == 10) || (num1 == num2))
             {
-                if (BFS(SelectedButton, clickedButton))
+                if ((BFS(SelectedButton, clickedButton)))
                 {
                     // Remover los botones y actualizar el puntaje
                     Hide(SelectedButton, clickedButton);
-                    Scoring(GameUI, clickedButton);
+                    Scoring(GameUI);
+                    ResetBoardIfEmpty(GameUI);
+                    CheckEndGame();
 
                     // Verificar y reemplazar filas si es necesario
                     ///////////////////////////////////////////////////////////////////CheckAndReplaceRows();
@@ -244,40 +260,34 @@ namespace NumberMatchGame
             return null;
         }
 
-        void Scoring(GameUI GameUI, NumberButton clickedbutton)
+        void Scoring(GameUI GameUI)
         {
             int Points = 0;
-            if (CheckEmptyRow(SelectedButton) && CheckEmptyRow(clickedbutton) && SelectedButton.Number.Y != clickedbutton.Number.Y)
-            {
-                Score += 20 * Level;
-                Points += 20 * Level;
-            }
-            else if (CheckEmptyRow(SelectedButton) || CheckEmptyRow(clickedbutton))
-            {
-                Score += 10 * Level;
-                Points += 10 * Level;
-            }
+            int RemovedRows = CheckAndReplaceRows(GameUI);
+
             if (Distant)
             {
-                Score += 4 * Level;
-                Points += 4 * Level;
+                Score += 4 * CurrentPhase;
+                Points += 4 * CurrentPhase;
             }
             else
             {
-                Score += 1 * Level;
-                Points += 1 * Level;
+                Score += 1 * CurrentPhase;
+                Points += 1 * CurrentPhase;
             }
             Distant = false;
+
+            Score += 10 * RemovedRows * CurrentPhase;
+            Points += 10 * RemovedRows * CurrentPhase;
             GameUI.SetPointsGained(Points);
-            GameUI.AnimatePointsGained();
             GameUI.SetScore(Score);
         }
 
-        bool CheckEmptyRow(NumberButton clickedbutton)
+        bool CheckEmptyRow(int Y)
         {
             for (int i = 0; i < BoardSize; i++)
             {
-                if (Numbers[clickedbutton.Number.Y][i].Visible) return false;
+                if (Numbers[Y][i].Visible) return false;
             }
             return true;
         }
@@ -296,14 +306,174 @@ namespace NumberMatchGame
             return false;
         }
 
-        private void CheckEndGame()
+        private void InsertNewLine(int numbersCount, (int, int) lastPosition)
         {
-            if (AddLineCount >= MaxAddLines && !CheckPossibleCombinations())
+            var (x, y) = lastPosition;
+            if (x == -1 && y == -1)
             {
-                MessageBox.Query("Game Over", "No more possible combinations. Game Over!", "OK");
-                Application.RequestStop(); // Terminar la aplicación
-
+                x = BoardSize - 1;
+                y = Numbers.Count;
             }
+
+            int lastLineFreeSpace = BoardSize - x - 1;
+            int exceds = (numbersCount - lastLineFreeSpace) % BoardSize;
+            int newLinesCount = exceds > 0 ? (numbersCount - lastLineFreeSpace) / BoardSize + 1 : (numbersCount - lastLineFreeSpace) / BoardSize;
+            newLinesCount -= Numbers.Count - y;
+            for (int i = 0; i < newLinesCount; i++)
+            {
+                var newLine = new NumberButton[BoardSize];
+                for (int j = 0; j < BoardSize; j++)
+                {
+                    var number = new Number(0, 0, -1);
+                    var btn = new NumberButton(number);
+                    btn.Visible = false;
+                    newLine[j] = btn;
+                }
+                Numbers.Add(newLine);
+            }
+        }
+        private void AddNewLine(GameUI GameUI)
+        {
+            if (AddLineCount <= 0)
+            {
+                MessageBox.ErrorQuery("Lo siento", "Ya no puedes agregar mas lineas", "OK");
+                return;
+            }
+
+            // Recoger números visibles del tablero
+            List<int> visibleNumbers = new List<int>();
+            int sizePreNewLines = Numbers.Count;
+            for (int i = 0; i < sizePreNewLines; i++)
+            {
+                for (int j = 0; j < BoardSize; j++)
+                {
+                    if (Numbers[i][j] != null && Numbers[i][j].Visible)
+                    {
+                        visibleNumbers.Add(Numbers[i][j].Number.Value);
+                    }
+                }
+            }
+
+            var (x, y) = GetLastEmptyPosition();
+            InsertNewLine(visibleNumbers.Count, (x, y));
+            if (x == -1 && y == -1)
+            {
+                x = 0;
+                y = sizePreNewLines;
+            }
+
+            int visibleNumbersCursor = 0;
+            // Añadir una nueva fila con los números visibles
+            for (int i = y; i < Numbers.Count; i++)
+            {
+                int j = 0;
+                if (i == y) j = x;
+                for (; j < BoardSize; j++)
+                {
+                    if (visibleNumbersCursor >= visibleNumbers.Count) break;
+                    var number = new Number(j, i, visibleNumbers[visibleNumbersCursor++]);
+                    var btn = new NumberButton(number);
+
+                    Numbers[i][j] = btn;
+                    btn.Clicked += () => HandleButtonClick(GameUI, btn);
+                    GameUI.Add(btn);
+                }
+            }
+
+            AddLineCount--;
+            GameUI.SetLines(AddLineCount);
+            GameUI.Refresh(); // Asegurarse de que el tablero se redibuje
+            CheckEndGame(); // Comprobar si el juego debe terminar
+        }
+
+        private (int, int) GetLastNumberPosition()
+        {
+            for (int i = Numbers.Count - 1; i >= 0; i--)
+            {
+                for (int j = BoardSize - 1; j >= 0; j--)
+                {
+                    if (Numbers[i][j] != null && Numbers[i][j].Visible)
+                    {
+                        return (j, i);
+                    }
+                }
+            }
+            return (0, 0);
+        }
+
+        private (int, int) GetLastEmptyPosition()
+        {
+            var (x, y) = GetLastNumberPosition();
+
+            if (x + 1 < BoardSize)
+            {
+                if (x == 0 && y == 0)
+                {
+                    return (0, 0);
+                }
+                if (x == BoardSize - 1)
+                {
+                    if (y + 1 < Numbers.Count)
+                    {
+                        return (0, y + 1);
+                    }
+                }
+                else
+                {
+                    if (x + 1 < BoardSize) return (x + 1, y);
+                }
+            }
+
+            return (-1, -1);
+        }
+
+        private void ProvideHint(GameUI GameUI)
+        {
+            if (HintCount <= 0)
+            {
+                MessageBox.ErrorQuery("Hint", "Si quieres otra pista tendrás que pasar por una microtransacción.", "OK");
+                return;
+            }
+
+            for (int i = 0; i < Numbers.Count; i++)
+            {
+                for (int j = 0; j < BoardSize; j++)
+                {
+                    var act = Numbers[i][j];
+                    if (act == null || !act.Visible) continue;
+                    var pair = RetrieveCombination(act);
+                    if (pair != null)
+                    {
+                        // Resaltamos la pista
+                        GameUI.SetColorSelected(act, pair);
+                        HintCount--;
+                        GameUI.SetHints(HintCount);
+                        GameUI.Refresh();
+                        return;
+                    }
+                }
+            }
+
+            MessageBox.ErrorQuery("Hint", "No quedan posibles combinaciones, añade una nueva línea de números.", "OK");
+        }
+
+        private int CheckAndReplaceRows(GameUI GameUI)
+        {
+            int count = 0;
+            bool removed;
+            do {
+                removed = false;
+                for(int i = 0; i < Numbers.Count; i++) {
+                    if(CheckEmptyRow(i)) {
+                        Numbers.RemoveAt(i);
+                        ++count;
+                        removed = true;
+                        break;
+                    }
+                }
+                RefreshBoard(GameUI);
+            } while(removed);
+            return count;
         }
 
         private void ResetBoardIfEmpty(GameUI GameUI)
@@ -330,163 +500,23 @@ namespace NumberMatchGame
 
                 // Restablecer el tablero
                 InitializeBoard(GameUI);
-                AddLineCount = 0;
-                HintCount = 0;
+                AddLineCount = 5;
+                GameUI.SetLines(AddLineCount);
+                HintCount = 3;
+                GameUI.SetHints(HintCount);
                 MessageBox.Query("Game Reset", "El tablero ha sido limpiado. Generando nuevo tablero...", "OK");
                 GameUI.Refresh();
             }
         }
 
-        private void InsertNewLine(int numbersCount, (int, int) lastPosition)
+         private void CheckEndGame()
         {
-            var (x, y) = lastPosition;
-            if (x == -1 && y == -1) {
-                x = BoardSize - 1;
-                y = Numbers.Count;
-            }
-
-            int lastLineFreeSpace = BoardSize - x - 1;
-            int exceds = (numbersCount - lastLineFreeSpace) % BoardSize;
-            int newLinesCount = exceds > 0 ? (numbersCount - lastLineFreeSpace) / BoardSize + 1 : (numbersCount - lastLineFreeSpace) / BoardSize;
-            newLinesCount -= Numbers.Count - y;
-            for (int i = 0; i < newLinesCount; i++)
+            if (AddLineCount <= 0 && !CheckPossibleCombinations())
             {
-                var newLine = new NumberButton[BoardSize];
-                for(int j = 0; j < BoardSize; j++) {
-                    var number = new Number(0, 0, -1);
-                    var btn = new NumberButton(number);
-                    btn.Visible = false;
-                    newLine[j] = btn;
-                }
-                Numbers.Add(newLine);
+                MessageBox.Query("Game Over", "No more possible combinations. Game Over!", "OK");
+                Application.RequestStop(); // Terminar la aplicación
+
             }
-        }
-        private void AddNewLine(GameUI GameUI)
-        {
-            if (AddLineCount >= MaxAddLines)
-            {
-                MessageBox.ErrorQuery("Lo siento", "Ya no puedes agregar mas lineas");
-                return;
-            }
-
-            // Recoger números visibles del tablero
-            List<int> visibleNumbers = new List<int>();
-            int sizePreNewLines = Numbers.Count;
-            for (int i = 0; i < sizePreNewLines; i++)
-            {
-                for (int j = 0; j < BoardSize; j++)
-                {
-                    if (Numbers[i][j] != null && Numbers[i][j].Visible)
-                    {
-                        visibleNumbers.Add(Numbers[i][j].Number.Value);
-                    }
-                }
-            }
-
-            var (x, y) = GetLastEmptyPosition();
-            MessageBox.Query("Test", $"GetLastNumberPosition Throw ({x}, {y})", "OK");
-            InsertNewLine(visibleNumbers.Count, (x, y));
-            if (x == -1 && y == -1) {
-                x = 0;
-                y = sizePreNewLines;
-            }
-            MessageBox.Query("Test", $"AddNewLine Throw ({x}, {y})", "OK");
-
-            int visibleNumbersCursor = 0;
-            // Añadir una nueva fila con los números visibles
-            for (int i = y; i < Numbers.Count; i++)
-            {
-                int j = 0;
-                if (i == y) j = x;
-                for (; j < BoardSize; j++)
-                {
-                    if (visibleNumbersCursor >= visibleNumbers.Count) break;
-                    var number = new Number(j, i, visibleNumbers[visibleNumbersCursor++]);
-                    var btn = new NumberButton(number);
-
-                    Numbers[i][j] = btn;
-                    btn.Clicked += () => HandleButtonClick(GameUI, btn);
-                    GameUI.Add(btn);
-                }
-            }
-
-            AddLineCount++;
-            GameUI.Refresh(); // Asegurarse de que el tablero se redibuje
-            CheckEndGame(); // Comprobar si el juego debe terminar
-        }
-
-        private (int, int) GetLastNumberPosition()
-        {
-            for (int i = Numbers.Count - 1; i >= 0; i--)
-            {
-                for (int j = BoardSize - 1; j >= 0; j--)
-                {
-                    if (Numbers[i][j] != null && Numbers[i][j].Visible) {
-                        return (j, i);
-                    }
-                }
-            }
-            return (-1, -1);
-        }
-
-        private (int, int) GetLastEmptyPosition()
-        {
-            var (x, y) = GetLastNumberPosition();
-            MessageBox.Query("Test", $"GetLastNumberPosition Throw ({x}, {y})", "OK");
-            if (x == -1 && y == -1) return (0, 0);
-
-            if (x + 1 < BoardSize)
-            {
-                NumberButton? act = null;
-                if (x == BoardSize - 1)
-                {
-                    if (y + 1 < Numbers.Count)
-                    {
-                        act = Numbers[y + 1][0];
-                    }
-                }
-                else
-                {
-                    act = Numbers[y][x + 1];
-                }
-
-                if (act != null && !act.Visible)
-                {
-                    return (act.Number.X, act.Number.Y);
-                }
-            }
-
-            MessageBox.Query("Test", $"GetLastNumberPositionAA Throw ({x}, {y})", "OK");
-            return (-1, -1);
-        }
-
-        private void ProvideHint(GameUI GameUI)
-        {
-            if (HintCount >= MaxHints)
-            {
-                MessageBox.ErrorQuery("Hint", "Si quieres otra pista tendrás que pasar por una microtransacción.", "OK");
-                return;
-            }
-
-            for (int i = 0; i < Numbers.Count; i++)
-            {
-                for (int j = 0; j < BoardSize; j++)
-                {
-                    var act = Numbers[i][j];
-                    if (act == null || !act.Visible) continue;
-                    var pair = RetrieveCombination(act);
-                    if (pair != null)
-                    {
-                        // Resaltamos la pista
-                        GameUI.SetColorSelected(act, pair);
-                        HintCount++;
-                        GameUI.Refresh();
-                        return;
-                    }
-                }
-            }
-
-            MessageBox.ErrorQuery("Hint", "No quedan posibles combinaciones, añade una nueva línea de números.", "OK");
         }
 
 

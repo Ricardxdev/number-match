@@ -24,8 +24,11 @@ namespace NumberMatchGame
         public NumberButton(Number number) : base(number.Value.ToString())
         {
             Number = number;
+            Text = number.Value.ToString();
             X = number.X * 5;
-            Y = number.Y;
+            Y = number.Y * 2;
+            Width = 4;
+            Height = 1;
         }
     }
 }
